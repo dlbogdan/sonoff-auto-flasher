@@ -1,9 +1,6 @@
 #!/bin/bash
 # Bogdan Lucian Dumitru 2020
-
-deviceID=""
-deviceIP=""
-
+# ALPHA VERSION
 
 function decho(){
 	if [[ $DEBUG == "on" ]]; then
