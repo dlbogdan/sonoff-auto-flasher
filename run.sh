@@ -13,10 +13,11 @@ function debug_log(){
 #	1 - info
 #	2 - verbose l1
 #	3 - verbose l2
+mainIndex=0;
 
 function log(){
-       if [[ $DEBUGLEVEL -ge $1 ]];then  
-	       echo "$(date) - Func:[${FUNCNAME[$((${#FUNCNAME[@]}-3))]}] DL:$@"
+	if [[ $DEBUGLEVEL -ge $1 ]];then  
+	       echo -e "$(date) - Func:[${FUNCNAME[1]}] DL:$@"
        fi
 }
 
@@ -29,7 +30,7 @@ function initInterface(){
 	ip link set ${INTERFACE} up
 	ip addr flush dev ${INTERFACE}
 	ip addr add ${AP_ADDR}/24 dev ${INTERFACE}
-	log 2 "Disabling multicast snooping on docker interface <<needed on most home network setups>>"
+	log 2 "Disabling multicast snooping on docker interface"
 	echo 0 > /sys/devices/virtual/net/docker0/bridge/multicast_snooping
 }
 
@@ -602,7 +603,7 @@ function getIP(){
 	fi
 }
 
-function main(){
+function _main(){
 	echo "============================"
 	echo "Bogdan L. Dumitru 2020"
 	echo "bogdan.dumitru@nightshift.ro"
@@ -614,7 +615,7 @@ function main(){
 	init || texit 2
 
 	if [[ $MODE == "pair" ]]; then 
-		echo "=== PAIRING MODE ==="
+		log 1 "=== PAIRING MODE ==="
 
 		if [[ -z $DIRECTIP ]]; then 
 			initInterface || texit 3
@@ -629,7 +630,7 @@ function main(){
 
 
 	elif [[ $MODE == "flash" ]]; then
-		echo "=== FLASHING MODE ==="
+		log 1 "=== FLASHING MODE ==="
 
 		if [[ -z $DIRECTIP ]]; then
 			initInterface || texit 10
@@ -647,4 +648,4 @@ function main(){
 
 }
 
-main
+_main
