@@ -2,36 +2,48 @@
 # Bogdan Lucian Dumitru 2020
 # ALPHA VERSION
 
-function decho(){
+function debug_log(){
 	if [[ $DEBUG == "on" ]]; then
-		echo -e "$(date) - DEBUG > $1"
+		log $@
 	fi
 
 }
 
+#debug levels
+#	1 - info
+#	2 - verbose l1
+#	3 - verbose l2
+
+function log(){
+       if [[ $DEBUGLEVEL -ge $1 ]];then  
+	       echo "$(date) - Func:[${FUNCNAME[$((${#FUNCNAME[@]}-2))]}] DL:$@"
+       fi
+}
+
+
 function initInterface(){
-	echo "$(date) - Func:initInterface - Initializing Wireless interface"
-	decho "initInterface: cleaning up interface"
+	log 1 "Initializing Wireless interface"
+	log 2 "cleaning up interface"
 	ip link set ${INTERFACE} down
 	rfkill unblock wifi
 	ip link set ${INTERFACE} up
 	ip addr flush dev ${INTERFACE}
 	ip addr add ${AP_ADDR}/24 dev ${INTERFACE}
-	decho "Disabling multicast snooping on docker interface <<needed on most home network setups>>"
+	log 2 "Disabling multicast snooping on docker interface <<needed on most home network setups>>"
 	echo 0 > /sys/devices/virtual/net/docker0/bridge/multicast_snooping
 }
 
 function initAvahi(){
-	echo "$(date) - Func:initAvahi - Initializing Avahi Discovery Service"
-	decho "initAvahi: starting dbus and avahi-daemon"
+	log 1 "Initializing Avahi Discovery Service"
+	log 2 "Starting dbus and avahi-daemon"
 	service dbus restart > /dev/null
 	avahi-daemon --no-drop-root -D
 	sleep 2
 }
 
 function initAP(){
-	echo "$(date) - Func:initAP - Initializing Access Point and discovery"
-	decho "initAP: config"
+	log 1 "Initializing Access Point and discovery"
+	log 2 "config"
 	mkdir -p "/etc/hostapd"
 	if [ ! -f "/etc/hostapd/hostapd.conf" ] ; then
 		cat > "/etc/hostapd/hostapd.conf" <<EOF
@@ -50,18 +62,18 @@ auth_algs=1
 ignore_broadcast_ssid=0
 EOF
 fi
-decho "initAP: starting service"
+log 1 "Starting service"
 service hostapd restart > /dev/null
 file=$(</etc/hostapd/hostapd.conf)
-decho "AP Config:\n================\n${file}\n==================\n"
+log 3 "AP Config:\n================\n${file}\n==================\n"
 ip link set ${INTERFACE} up
 :
 }
 
 
 function initDHCPD(){
-	echo "$(date) - Func:initDHCPD - Initializing DHCP Server"
-	decho "initDHCPD: config"
+	log 1 "Initializing DHCP Server"
+	log 2 "Config"
 	cat > "/etc/udhcpd.conf" <<EOF
 start           172.10.1.10
 end             172.10.1.254
@@ -71,17 +83,20 @@ opt	router	${AP_ADDR}
 opt	subnet	255.255.255.0
 opt	lease	864000
 EOF
+
+file=$(</etc/udhcpd.conf)
+log 3 "DHCPD Config:\n================\n${file}\n==================\n"
 sed -i 's/DHCPD_ENABLED="no"/DHCPD_ENABLED="yes"/g' /etc/default/udhcpd
 touch /var/lib/misc/udhcpd.leases
-decho "initDHCPD: starting service"
+log 2 "Starting service"
 udhcpd /etc/udhcpd.conf
-decho "sleeping 10 seconds to allow association of device to this machine"
+log 2 "sleeping 10 seconds to allow association of device to this machine"
 sleep 10
 :
 }
 
 function init(){
-	echo "$(date) - Func:init - Initializing"
+	log 1 "Initializing"
 
 	return 0
 	:
@@ -98,7 +113,7 @@ deviceIP=$1
 }
 
 function scanWithAvahi(){
-	echo "$(date) - Func:scanWithAvahi - Scanning with avahi protocol"
+	log 1 "Scanning with avahi protocol"
 	retryCount=0;
 	avahiFound=false;
 	response=""
@@ -107,15 +122,15 @@ function scanWithAvahi(){
 		response=$(avahi-browse -pt _ewelink._tcp --resolve | grep ${INTERFACE} | grep "=;")
 		count=$(echo -e "$response" | wc -l)
 		if [ $count -gt 1 ]; then
-			echo "Multiple devices found. Please run docker specifying the device with DIRECTIP=<addr of device>"
-			echo "This docker will terminate after the list"
+			log 1 "Multiple devices found. Please run docker specifying the device with DIRECTIP=<addr of device>"
+			log 1 "This docker will terminate after the list"
 		fi
 
 		if [[ -z "$response" ]]; then
-			echo "Retrying."
+			log 1 "Retrying."
 			((retryCount+=1));
 		else
-			echo "Found."
+			log 1 "Found."
 			avahiFound=true;
 		fi
 	done
@@ -127,22 +142,22 @@ function scanWithAvahi(){
 		IFS=";" read -r -a arr <<< "$response"
 				noItems=${#arr[@]}
 				if [ $noItems -ne 10 ]; then
-					echo "Unexpected response or malformed packet."
+					log 1 "Unexpected response or malformed packet."
 					#                       decho $response
 					return 1;
 				else
-					echo "Response looks good."
+					log 1 "Response looks good."
 					#                       printf '%s\n' "${arr[@]}"
 					set_deviceIPvar ${arr[7]}
 					set_deviceIDvar $(echo ${arr[6]} | cut -d"_" -f2 | cut -d"." -f1)
 
-					echo "Host $deviceIP seems to be a sonoff device and has ID:$deviceID";
+					log 1 "Host $deviceIP seems to be a sonoff device and has ID:$deviceID";
 					doNmap=false;
 				fi
 #				unset arr
 #			done
 		else
-			echo "Failed."
+			log 1 "Failed."
 			return 1;
 
 		fi
@@ -150,8 +165,6 @@ function scanWithAvahi(){
 		if [ $count -gt 1 ]; then
 			return 2;
 		fi
-		echo "0: $deviceID"
-		echo "0: $deviceIP"
 		return 0;
 	}
 
@@ -204,11 +217,11 @@ echo "$(network $ip $mask)/$mask"
 }
 
 function scanWithNmap(){
-	echo "$(date) - Func:scanWithNmap - scanning with Nmap + JSON Query"
+	log 1 "scanning with Nmap + REST API"
 	netAndMask=$(getNetworkAndMask_echo)
-	decho $netAndMask
+	log 2 $netAndMask
 	nmapout=$(nmap -T4 -sS -p8081 -oG - $netAndMask | grep "open")
-	decho "$nmapout"
+	log 3 "$nmapout"
 	count=0;
 	multiplefound=true;
 	local IFS=$'\n' ; 
@@ -219,10 +232,10 @@ function scanWithNmap(){
 		if [[ $error == "0" ]]; then
 			export deviceIP=$host
 			((count+=1))
-			echo "Host $host seems to be a sonoff device";
+			log 1 "Host $host seems to be a sonoff device";
 			if [ $count -gt 1 ]; then
-				echo "Multiple devices found. Please run docker specifying the device with DIRECTIP=<addr of device>"
-				echo "This docker will terminate after the list"
+				log 1 "Multiple devices found. Please run docker specifying the device with DIRECTIP=<addr of device>"
+				log 1 "This docker will terminate after the list"
 				multiplefound=true;
 			fi
 
@@ -236,17 +249,16 @@ function scanWithNmap(){
 }
 
 function scan(){
-	echo "$(date) - Func:scan - Scanning for devices"
+	log 1 "Scanning for devices"
 	if [[ $FORCENMAP != "yes" ]]; then
 		scanWithAvahi 
-		echo "1: $deviceID"
 		ret=$?
 	else
-		echo "Forcing Nmap scanning"
+		log 1 "Forcing Nmap scanning"
 		ret=1;
 	fi
 	if [ $ret -eq 1 ] && [ -z $DEVICEID ]; then
-		echo "Getting the Device ID with Nmap is not possible. Set it manually with DEVICEID=<devid> variable."
+		log 1 "Getting the Device ID with Nmap is not possible. Set it manually with DEVICEID=<devid> variable."
 		texit 21;
 	fi
 	case $ret in
@@ -268,7 +280,7 @@ ip addr show $1 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1
 }
 
 function enableInternetRouting(){
-  echo "Enabling internet routing for OTA unlocking"
+  log 1 "Enabling internet routing for OTA unlocking"
   echo 1 > /proc/sys/net/ipv4/ip_forward
   internetIF=$(netstat -rn | grep ^0.0.0.0 | awk '{print $8}')
   netAndMask=$(getNetworkAndMask_echo)
@@ -279,22 +291,23 @@ function enableInternetRouting(){
 }
 
 function unlockOTA(){
-	echo "$(date) - Func:unlockOTA - unlocking OverTheAir updating"
+	#todo actually test if device was succesfully unlocked with JSON answer
+	log 1 "unlocking OverTheAir updating"
 	enableInternetRouting
 	sleep 2
-	decho "DEVICEID: $deviceID"
+	log 2 "DEVICEID: $deviceID"
 	out=$(curl http://${deviceIP}:8081/zeroconf/ota_unlock -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\": { } }" 2>/dev/null)
         error=$(echo -e "$out" | getJSONVarFromQuery .error)
         if [[ $error != "0" ]]; then
-                echo "Error occured unlocking OTA"
+                log 1 "Error occured unlocking OTA"
                 return 1;
         fi
-	echo "Success!"
+	log 1 "Success!"
 	:
 }
 
 function hostFileHTTP(){
-	echo "$(date) - Func:hostFileHTTP - serving File over HTTP"
+	log 1 "serving File over HTTP"
 	cat > "/etc/lighttpd.conf" <<EOF
 server.modules = (
 "mod_access",
@@ -308,17 +321,21 @@ debug.log-request-header = "enable"
 server.port = 9999
 server.document-root        = "/firmware"
 EOF
-	lighttpd -D -f /etc/lighttpd.conf &
+file=$(</etc/lighttpd.conf)
+log 3 "HTTPD Config:\n================\n${file}\n==================\n"
+log 1 "Starting service"
+lighttpd -D -f /etc/lighttpd.conf &
 
 	:
 }
+
 isIpAlive_countfailed=0;
 function isDeviceAlive(){
 
 ping -W 2 -c 1 $deviceIP > /dev/null
 if [ $? -ne 0 ]; then
 	((isIpAlive_countfailed+=1))
-	decho "ping $deviceIP failed consecutive count: $isIpAlive_countfailed"
+	log 2 "ping $deviceIP failed consecutive count: $isIpAlive_countfailed"
 else
 	isIpAlive_countfailed=0;
 fi
@@ -332,40 +349,42 @@ return 0;
 }
 
 function updateFw(){
-	echo "$(date) - Func:updateFw - Updating Firmware"
-	echo "Checking the device"
+	log 1 "Updating Firmware"
+	log 2 "Checking the device"
 	out=$(curl -m 2  http://${deviceIP}:8081/zeroconf/info -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\":{} }" 2>/dev/null )
         error=$(echo -e "$out" | getJSONVarFromQuery .error)
-	decho $out;
+	log 3 $out;
         if [[ $error != "0" ]]; then 
 		echo "Device not ready"
 		return 1;
 	fi
-	echo "Device should be ready"
-	echo "Initiating firmware update"
+	log 2 "Device should be ready"
+	log 1 "Initiating"
 	sha256=$(sha256sum /firmware/image.bin | awk '{print $1}');
+	log 3 "Firmware image SHA256 is $sha256"
 	ipaddr=$(getHostIPOnIntf_echo ${INTERFACE})
-	decho "Our IP is $ipaddr"
+	log 2 "Our IP is $ipaddr"
 	out=$(curl -m 2  http://${deviceIP}:8081/zeroconf/ota_flash -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\":{\"downloadUrl\":\"http://${ipaddr}:9999/image.bin\",\"sha256sum\":\"${sha256}\"} }" 2>/dev/null )	
         error=$(echo -e "$out" | getJSONVarFromQuery .error)
-        decho $out;
+        log 2 $out;
         if [[ $error != "0" ]]; then
-                echo "Warning! Device returned an error."
-		echo "Will not exit because of the permanent damage posibility if the firmware is actually being updated and the http_server goes down"
-		echo "Please stop this docker manually, or if lucky, wait for the firmware to finish updating."
-		echo "Either way, I'm out of here. Nothing else to do but wait."
+                log 1 "Warning! Device returned an error."
+		log 1 "Will not exit because of the permanent damage posibility if the firmware is actually being updated and the http_server goes down"
+		log 1 "Please stop this docker manually, or if lucky, wait for the firmware to finish updating."
+		log 1 "Either way, I'm out of here. Nothing else to do but wait."
         fi
+	#todo actually test current firmware transfer from output of httpd server instead of just waiting for device to die
 	while isDeviceAlive; do
 	: #we do nothing but just wait for the device to finish getting the image file from us.
 	done
-	echo "Device stopped responding. Probably finished updating and is restarting."
-	echo "Waiting 10 more seconds just in case"	
+	log 1 "Device stopped responding. Probably finished updating and is restarting."
+	log 1 "Waiting 10 more seconds just in case"	
 	sleep 10
-	echo "Done."
+	log 1 "Done."
 }
 
 function pairByIP(){
-	echo "$(date) - Func:pairByIP - Pairing device"
+	log 1 "Pairing device"
 
 	:
 }
@@ -389,10 +408,10 @@ function getID(){
 }
 
 function helpVars(){
-	echo "This container can either flash a custom rom on your sonoff device (diy mode)"
-	echo "or pair your device to an existing wireless network"
+	log 1 "This container can either flash a custom rom on your sonoff device (diy mode)"
+	log 1 "or pair your device to an existing wireless network"
 	echo 
-	echo "Help with docker container environment variables setup"
+	log 1 "Help with docker container environment variables setup"
 
 	texit 1
 	:
@@ -400,12 +419,12 @@ function helpVars(){
 
 function checkMODEvar(){
 	if [[ -z $MODE ]]; then 
-		echo "MODE must be set"
+		log 1 "MODE must be set"
 		return 1;
 	fi
 
 	if [[ $MODE != "flash" ]] && [[ $MODE != "pair" ]]; then
-		echo "Variable MODE can be \"flash\" or \"pair\""
+		log 1 "Variable MODE can be \"flash\" or \"pair\""
 		return 1;
 	fi
 
@@ -413,19 +432,19 @@ function checkMODEvar(){
 
 function checkINTERFACEvar(){
 	if [[ -z $INTERFACE ]]; then
-		echo "INTERFACE must be set"
+		log 1 "INTERFACE must be set"
 		return 1;
 	fi
 
 	if [ ! -d "/sys/class/net/${INTERFACE}" ]; then
-		echo "Interface $INTERFACE does not exist!"
+		log 1 "Interface $INTERFACE does not exist!"
 		return 1;
 	fi
 
 	if [ -z $DIRECTIP ]; then
 		if [ ! -d "/sys/class/net/${INTERFACE}/wireless" ]; then
-			echo "Interface $INTERFACE is not a wireless interface."
-			echo "You may use any interface only if you set variable DIRECTIP=<addr>|scan"
+			log 1 "Interface $INTERFACE is not a wireless interface."
+			log 1 "You may use any interface only if you set variable DIRECTIP=<addr>|scan"
 			return 1;
 		fi
 	fi
@@ -464,8 +483,8 @@ function checkFWFILEvar(){
 	fi
 
 	if [ ! -f /firmware/image.bin ]; then
-		echo "Firmware file does not exist. Please mount your folder containing the firmware to this docker. The mounted volume must contain the file named image.bin"
-	        echo "Example of docker run argument:  -v \$PWD:/firmware  which will mounting current directory to /firmware inside docker."
+		log 1 "Firmware file does not exist. Please mount your folder containing the firmware to this docker. The mounted volume must contain the file named image.bin"
+	        log 1 "Example of docker run argument:  -v \$PWD:/firmware  which will mounting current directory to /firmware inside docker."
 		echo
 		return 1
 	fi
@@ -473,19 +492,19 @@ function checkFWFILEvar(){
 	if [[ $ALLOWBIGFIRMWARE != "yes" ]]; then
 	binSize=$(stat -c "%s" /firmware/image.bin)
 	if [ $binSize -gt 520192 ]; then
-		echo "Warning ! The firmware image exceeds 508 kBytes. The initial firmware should be less than that."
-		echo "If you know what you're doing please set env variable ALLOWBIGFIRMWARE=yes"
-		echo "If you aren't sure I suggest flashing a lite version of the firmware first. For example https://github.com/arendst/Tasmota/releases/download/v8.1.0/tasmota-lite.bin"
-		echo "And then from the tasmota web server you can upgrade to the full variant. Ditto for ESPHome or anything else."
+		log 1 "Warning ! The firmware image exceeds 508 kBytes. The initial firmware should be less than that."
+		log 1 "If you know what you're doing please set env variable ALLOWBIGFIRMWARE=yes"
+		log 1 "If you aren't sure I suggest flashing a lite version of the firmware first. For example https://github.com/arendst/Tasmota/releases/download/v8.1.0/tasmota-lite.bin"
+		log 1 "And then from the tasmota web server you can upgrade to the full variant. Ditto for ESPHome or anything else."
 		return 1;
 	fi
 	fi
 
-	echo "Checking firmware image with esptool"
+	log 1 "Checking firmware image with esptool"
 	echo
  	esptool.py image_info /firmware/image.bin
 	if [ $? -ne 0 ]; then
-		echo "Firmware file is invalid"
+		log 1 "Firmware file is invalid"
 		return 1
 	fi
 
@@ -496,13 +515,13 @@ function checkFWFILEvar(){
 function checkAPSSIDvar(){
 	if [[ -n $APSSID ]]; then
 		if [[ $MODE == "flash" ]]; then
-			decho "Ignoring APSSID variable in flashing mode"
+			log 2 "Ignoring APSSID variable in flashing mode"
 			return 0
 		fi
 
 	else
 		if [[ $MODE == "pair" ]]; then
-			echo "APSSID var must be set in pairing mode"
+			log 1 "APSSID var must be set in pairing mode"
 			return 1;
 		fi
 	fi
@@ -514,12 +533,12 @@ function checkAPSSIDvar(){
 function checkAPPASSWvar(){
 	if [[ -n $APPASSWD ]]; then
 		if [[ $MODE == "flash" ]]; then
-			decho "Ignoring APPASSW variable in flashing mode"
+			log 2 "Ignoring APPASSW variable in flashing mode"
 			return 0
 		fi
 	else
 		if [[ $MODE == "pair" ]]; then
-			echo "APPASSW var must be set in pairing mode"
+			log 1 "APPASSW var must be set in pairing mode"
 			return 1;
 		fi
 	fi
@@ -530,7 +549,7 @@ function checkAPPASSWvar(){
 
 function checkDEVICEIDvar(){
 	if [[ -n $DEVICEID ]]; then
-		decho "DEVICEID var set, scanning possible with Nmap"
+		log 2 "DEVICEID var set, scanning possible with Nmap"
 		export deviceID=$DEVICEID
 	fi
 
@@ -538,13 +557,13 @@ function checkDEVICEIDvar(){
 
 function checkPrivilegedMode(){
 	if [ ! -w "/sys" ] ; then
-        	echo "[Error] Not running in privileged mode."
+        	log 1 "[Error] Not running in privileged mode."
 		return 1;
 	fi
 }
 
 function checkVars(){
-	echo "$(date) - Func:checkVars - Checking Variables"
+	log 1 "Checking Variables"
 	## defaults
 	true ${CHANNEL:=1}
 	true ${HW_MODE:=g}
@@ -572,14 +591,13 @@ function texit(){
 
 function getIP(){
 	if [[ -z $DIRECTIP ]]; then
-		echo "Scanning on the newly created AccesPoint."
+		log 1 "Scanning on the newly created AccesPoint."
 		scan || return 1;
 	elif [[ $DIRECTIP != "scan" ]]; then 
-		echo "Scanning disabled. DIRECTIP var is set."
+		log 1 "Scanning disabled. DIRECTIP var is set."
 	else 
 		scan || return 1;
 	fi
-	echo "2: $deviceID"
 }
 
 function main(){
@@ -620,7 +638,6 @@ function main(){
 			initAvahi || texit 14
 		fi
 		getIP || texit 15
-		echo "3: $deviceID"
 		unlockOTA || texit 16
 		hostFileHTTP || texit 17
 		updateFw || texit 18
