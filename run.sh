@@ -17,8 +17,9 @@ mainIndex=0;
 
 function log(){
 	if [[ $DEBUGLEVEL -ge $1 ]];then  
-	       echo -e "$(date) - Func:[${FUNCNAME[1]}] DL:$@"
-       fi
+		shift
+		echo -e "$(date +"%T %d/%m/%y") - Func:[${FUNCNAME[1]}] $@"
+	fi
 }
 
 
@@ -110,7 +111,7 @@ function set_deviceIDvar(){
 }
 
 function set_deviceIPvar(){
-deviceIP=$1
+	deviceIP=$1
 }
 
 function scanWithAvahi(){
@@ -128,7 +129,7 @@ function scanWithAvahi(){
 		fi
 
 		if [[ -z "$response" ]]; then
-			log 1 "Retrying."
+			log 2 "Retrying."
 			((retryCount+=1));
 		else
 			log 1 "Found."
@@ -140,81 +141,81 @@ function scanWithAvahi(){
 
 #		printf "%s\n" "$response" | while IFS=';' read -r -a arr
 #		do
-		IFS=";" read -r -a arr <<< "$response"
-				noItems=${#arr[@]}
-				if [ $noItems -ne 10 ]; then
-					log 1 "Unexpected response or malformed packet."
-					#                       decho $response
-					return 1;
-				else
-					log 1 "Response looks good."
-					#                       printf '%s\n' "${arr[@]}"
-					set_deviceIPvar ${arr[7]}
-					set_deviceIDvar $(echo ${arr[6]} | cut -d"_" -f2 | cut -d"." -f1)
+IFS=";" read -r -a arr <<< "$response"
+noItems=${#arr[@]}
+if [ $noItems -ne 10 ]; then
+	log 1 "Unexpected response or malformed packet."
+	#                       decho $response
+	return 1;
+else
+	log 1 "Response looks good."
+	#                       printf '%s\n' "${arr[@]}"
+	set_deviceIPvar ${arr[7]}
+	set_deviceIDvar $(echo ${arr[6]} | cut -d"_" -f2 | cut -d"." -f1)
 
-					log 1 "Host $deviceIP seems to be a sonoff device and has ID:$deviceID";
-					doNmap=false;
-				fi
+	log 1 "Host $deviceIP seems to be a sonoff device and has ID:$deviceID";
+	doNmap=false;
+fi
 #				unset arr
 #			done
-		else
-			log 1 "Failed."
-			return 1;
+else
+	log 1 "Failed."
+	return 1;
 
-		fi
+fi
 
-		if [ $count -gt 1 ]; then
-			return 2;
-		fi
-		return 0;
-	}
+if [ $count -gt 1 ]; then
+	return 2;
+fi
+return 0;
+}
 
 ip2int()
 {
-    local a b c d
-    { IFS=. read a b c d; } <<< $1
-    echo $(((((((a << 8) | b) << 8) | c) << 8) | d))
-}
+	local a b c d
+	{ IFS=. read a b c d; } <<< $1
+		echo $(((((((a << 8) | b) << 8) | c) << 8) | d))
+	}
 
 int2ip()
 {
-    local ui32=$1; shift
-    local ip n
-    for n in 1 2 3 4; do
-        ip=$((ui32 & 0xff))${ip:+.}$ip
-        ui32=$((ui32 >> 8))
-    done
-    echo $ip
+	local ui32=$1; shift
+	local ip n
+	for n in 1 2 3 4; do
+		ip=$((ui32 & 0xff))${ip:+.}$ip
+		ui32=$((ui32 >> 8))
+	done
+	echo $ip
 }
 
 netmask()
 # Example: netmask 24 => 255.255.255.0
 {
-    local mask=$((0xffffffff << (32 - $1))); shift
-    int2ip $mask
+	local mask=$((0xffffffff << (32 - $1))); shift
+	int2ip $mask
 }
 
 
 broadcast()
 # Example: broadcast 192.0.2.0 24 => 192.0.2.255
 {
-    local addr=$(ip2int $1); shift
-    local mask=$((0xffffffff << (32 -$1))); shift
-    int2ip $((addr | ~mask))
+	local addr=$(ip2int $1); shift
+	local mask=$((0xffffffff << (32 -$1))); shift
+	int2ip $((addr | ~mask))
 }
 
 network()
 # Example: network 192.0.2.0 24 => 192.0.2.0
 {
-    local addr=$(ip2int $1); shift
-    local mask=$((0xffffffff << (32 -$1))); shift
-    int2ip $((addr & mask))
+	local addr=$(ip2int $1); shift
+	local mask=$((0xffffffff << (32 -$1))); shift
+	int2ip $((addr & mask))
 }
 
 function getNetworkAndMask_echo(){
-ipAndMask=$(ip -o -f inet addr show ${INTERFACE} | awk '{print $4}')
-IFS=/ read -r ip mask <<< $ipAndMask
-echo "$(network $ip $mask)/$mask"
+	ipAndMask=$(ip -o -f inet addr show ${INTERFACE} | awk '{print $4}')
+	IFS=/ read -r ip mask <<< $ipAndMask
+	echo "$(network $ip $mask)/$mask"
 }
 
 function scanWithNmap(){
@@ -228,7 +229,7 @@ function scanWithNmap(){
 	local IFS=$'\n' ; 
 	for hostnmap in $nmapout; do
 		host=$(echo $hostnmap | awk '{print $2}')
-		out=$(curl -m 1  http://${host}:8081/zeroconf/info -XPOST --data '{"deviceid":"deviceid","data":{} }' 2>/dev/null ) #this works with 3.30 firmware, but it shouldn't as the deviceid is not legal.
+		out=$(curl -m 1  http://${host}:8081/zeroconf/info -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\":{} }" 2>/dev/null )
 		error=$(echo -e "$out" | getJSONVarFromQuery .error)
 		if [[ $error == "0" ]]; then
 			export deviceIP=$host
@@ -277,18 +278,18 @@ function scan(){
 }
 
 function getHostIPOnIntf_echo(){
-ip addr show $1 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1
+	ip addr show $1 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1
 }
 
 function enableInternetRouting(){
-  log 1 "Enabling internet routing for OTA unlocking"
-  echo 1 > /proc/sys/net/ipv4/ip_forward
-  internetIF=$(netstat -rn | grep ^0.0.0.0 | awk '{print $8}')
-  netAndMask=$(getNetworkAndMask_echo)
-  iptables -A FORWARD -o ${internetIF} -i ${INTERFACE} -s ${netAndMask} -m conntrack --ctstate NEW -j ACCEPT
-  iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-  iptables -t nat -F POSTROUTING
-  iptables -t nat -A POSTROUTING -o ${internetIF} -j MASQUERADE
+	log 1 "Enabling internet routing for OTA unlocking"
+	echo 1 > /proc/sys/net/ipv4/ip_forward
+	internetIF=$(netstat -rn | grep ^0.0.0.0 | awk '{print $8}')
+	netAndMask=$(getNetworkAndMask_echo)
+	iptables -A FORWARD -o ${internetIF} -i ${INTERFACE} -s ${netAndMask} -m conntrack --ctstate NEW -j ACCEPT
+	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+	iptables -t nat -F POSTROUTING
+	iptables -t nat -A POSTROUTING -o ${internetIF} -j MASQUERADE
 }
 
 function unlockOTA(){
@@ -298,11 +299,11 @@ function unlockOTA(){
 	sleep 2
 	log 2 "DEVICEID: $deviceID"
 	out=$(curl http://${deviceIP}:8081/zeroconf/ota_unlock -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\": { } }" 2>/dev/null)
-        error=$(echo -e "$out" | getJSONVarFromQuery .error)
-        if [[ $error != "0" ]]; then
-                log 1 "Error occured unlocking OTA"
-                return 1;
-        fi
+	error=$(echo -e "$out" | getJSONVarFromQuery .error)
+	if [[ $error != "0" ]]; then
+		log 1 "Error occured unlocking OTA"
+		return 1;
+	fi
 	log 1 "Success!"
 	:
 }
@@ -327,35 +328,35 @@ log 3 "HTTPD Config:\n================\n${file}\n==================\n"
 log 1 "Starting service"
 lighttpd -D -f /etc/lighttpd.conf &
 
-	:
+:
 }
 
 isIpAlive_countfailed=0;
 function isDeviceAlive(){
 
-ping -W 2 -c 1 $deviceIP > /dev/null
-if [ $? -ne 0 ]; then
-	((isIpAlive_countfailed+=1))
-	log 2 "ping $deviceIP failed consecutive count: $isIpAlive_countfailed"
-else
-	isIpAlive_countfailed=0;
-fi
+	ping -W 2 -c 1 $deviceIP > /dev/null
+	if [ $? -ne 0 ]; then
+		((isIpAlive_countfailed+=1))
+		log 2 "ping $deviceIP failed consecutive count: $isIpAlive_countfailed"
+	else
+		isIpAlive_countfailed=0;
+	fi
 
-if [ $isIpAlive_countfailed -gt 8 ]; then
-	isIpAlive_countfailed=0;
-	return 1
-fi
+	if [ $isIpAlive_countfailed -gt 8 ]; then
+		isIpAlive_countfailed=0;
+		return 1
+	fi
 
-return 0;
+	return 0;
 }
 
 function updateFw(){
 	log 1 "Updating Firmware"
 	log 2 "Checking the device"
 	out=$(curl -m 2  http://${deviceIP}:8081/zeroconf/info -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\":{} }" 2>/dev/null )
-        error=$(echo -e "$out" | getJSONVarFromQuery .error)
+	error=$(echo -e "$out" | getJSONVarFromQuery .error)
 	log 3 $out;
-        if [[ $error != "0" ]]; then 
+	if [[ $error != "0" ]]; then 
 		echo "Device not ready"
 		return 1;
 	fi
@@ -366,17 +367,17 @@ function updateFw(){
 	ipaddr=$(getHostIPOnIntf_echo ${INTERFACE})
 	log 2 "Our IP is $ipaddr"
 	out=$(curl -m 2  http://${deviceIP}:8081/zeroconf/ota_flash -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\":{\"downloadUrl\":\"http://${ipaddr}:9999/image.bin\",\"sha256sum\":\"${sha256}\"} }" 2>/dev/null )	
-        error=$(echo -e "$out" | getJSONVarFromQuery .error)
-        log 2 $out;
-        if [[ $error != "0" ]]; then
-                log 1 "Warning! Device returned an error."
+	error=$(echo -e "$out" | getJSONVarFromQuery .error)
+	log 2 $out;
+	if [[ $error != "0" ]]; then
+		log 1 "Warning! Device returned an error."
 		log 1 "Will not exit because of the permanent damage posibility if the firmware is actually being updated and the http_server goes down"
 		log 1 "Please stop this docker manually, or if lucky, wait for the firmware to finish updating."
 		log 1 "Either way, I'm out of here. Nothing else to do but wait."
-        fi
+	fi
 	#todo actually test current firmware transfer from output of httpd server instead of just waiting for device to die
 	while isDeviceAlive; do
-	: #we do nothing but just wait for the device to finish getting the image file from us.
+		: #we do nothing but just wait for the device to finish getting the image file from us.
 	done
 	log 1 "Device stopped responding. Probably finished updating and is restarting."
 	log 1 "Waiting 10 more seconds just in case"	
@@ -459,9 +460,9 @@ function checkDIRECTIPvar(){
 	#// todo test if IP is serving HTTP on 8081 
 	#// todo test if IP is on the INTERFACE	
 	if [ -z $DIRECTIP ]; then
-	if [[ $DIRECTIP != "scan" ]]; then
-		deviceIP=$DIRECTIP
-	fi
+		if [[ $DIRECTIP != "scan" ]]; then
+			deviceIP=$DIRECTIP
+		fi
 	fi
 
 	:
@@ -479,18 +480,18 @@ function checkFWFILEvar(){
 #		echo "FWFILE var must be set in flashing mode."
 #		return 1
 #	fi
-	if [[ $MODE != "flash" ]]; then 
-		return 0
-	fi
+if [[ $MODE != "flash" ]]; then 
+	return 0
+fi
 
-	if [ ! -f /firmware/image.bin ]; then
-		log 1 "Firmware file does not exist. Please mount your folder containing the firmware to this docker. The mounted volume must contain the file named image.bin"
-	        log 1 "Example of docker run argument:  -v \$PWD:/firmware  which will mounting current directory to /firmware inside docker."
-		echo
-		return 1
-	fi
-	
-	if [[ $ALLOWBIGFIRMWARE != "yes" ]]; then
+if [ ! -f /firmware/image.bin ]; then
+	log 1 "Firmware file does not exist. Please mount your folder containing the firmware to this docker. The mounted volume must contain the file named image.bin"
+	log 1 "Example of docker run argument:  -v \$PWD:/firmware  which will mounting current directory to /firmware inside docker."
+	echo
+	return 1
+fi
+
+if [[ $ALLOWBIGFIRMWARE != "yes" ]]; then
 	binSize=$(stat -c "%s" /firmware/image.bin)
 	if [ $binSize -gt 520192 ]; then
 		log 1 "Warning ! The firmware image exceeds 508 kBytes. The initial firmware should be less than that."
@@ -499,18 +500,22 @@ function checkFWFILEvar(){
 		log 1 "And then from the tasmota web server you can upgrade to the full variant. Ditto for ESPHome or anything else."
 		return 1;
 	fi
-	fi
+fi
 
-	log 1 "Checking firmware image with esptool"
-	echo
- 	esptool.py image_info /firmware/image.bin
-	if [ $? -ne 0 ]; then
-		log 1 "Firmware file is invalid"
-		return 1
-	fi
+log 1 "Checking firmware image with esptool"
+if [ $DEBUGLEVEL -lt 3 ]; then
+	esptool.py image_info /firmware/image.bin > /dev/null
+else
+	esptool.py image_info /firmware/image.bin
+fi
 
-		
-	:
+if [ $? -ne 0 ]; then
+	log 1 "Firmware file is invalid"
+	return 1
+fi
+
+
+:
 }
 
 function checkAPSSIDvar(){
@@ -558,7 +563,7 @@ function checkDEVICEIDvar(){
 
 function checkPrivilegedMode(){
 	if [ ! -w "/sys" ] ; then
-        	log 1 "[Error] Not running in privileged mode."
+		log 1 "[Error] Not running in privileged mode."
 		return 1;
 	fi
 }
