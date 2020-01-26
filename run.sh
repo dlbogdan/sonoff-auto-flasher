@@ -536,6 +536,13 @@ function checkDEVICEIDvar(){
 
 }
 
+function checkPrivilegedMode(){
+	if [ ! -w "/sys" ] ; then
+        	echo "[Error] Not running in privileged mode."
+		return 1;
+	fi
+}
+
 function checkVars(){
 	echo "$(date) - Func:checkVars - Checking Variables"
 	## defaults
@@ -544,7 +551,7 @@ function checkVars(){
 	true ${DRIVER:=nl80211}
 	true ${AP_ADDR:=172.10.1.1}
 	##
-
+	checkPrivilegedMode || return 1
 	checkDEVICEIDvar || return 1
 	checkMODEvar || return 1
 	checkINTERFACEvar || return 1
