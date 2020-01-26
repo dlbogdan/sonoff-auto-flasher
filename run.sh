@@ -2,12 +2,6 @@
 # Bogdan Lucian Dumitru 2020
 # ALPHA VERSION
 
-function debug_log(){
-	if [[ $DEBUG == "on" ]]; then
-		log $@
-	fi
-
-}
 
 #debug levels
 #	1 - info
@@ -410,11 +404,18 @@ function getID(){
 }
 
 function helpVars(){
-	log 1 "This container can either flash a custom rom on your sonoff device (diy mode)"
-	log 1 "or pair your device to an existing wireless network"
+	echo -e "\n\n\n"
+	(echo "This container can either flash a custom rom on your sonoff device (diy mode)"
+        echo  " or pair your device to an existing wireless network"
+	echo
+	echo  " Help with docker container arguments and environment variables setup"
 	echo 
-	log 1 "Help with docker container environment variables setup"
-
+	echo  " This container needs to run in privileged mode and with direct access to network"
+	echo  " This is achieved with --privileged --net=host docker command arguments"
+	echo 
+	echo  "Mode setup: "
+	) | boxes -d stone
+	echo -e "\n\n\n"
 	texit 1
 	:
 }
@@ -592,7 +593,9 @@ function checkVars(){
 
 
 function texit(){
-	echo "Aborted. Exit code $1"
+	for i in {21..16} {16..21} ; do echo -en "\e[38;5;${i}m==\e[0m" ; done ; echo
+	echo -e "\033[33;5m\e[1m\e[91m  Aborted. Exit code $1\033[0m" 
+	for i in {21..16} {16..21} ; do echo -en "\e[38;5;${i}m==\e[0m" ; done ; echo
 	if [[ -n $2 ]]; then echo $2; fi
 	exit $1
 }
@@ -609,14 +612,10 @@ function getIP(){
 }
 
 function _main(){
-	echo "============================"
-	echo "Bogdan L. Dumitru 2020"
-	echo "bogdan.dumitru@nightshift.ro"
-	echo "============================"
-	echo
-	echo
-
-	checkVars || helpVars
+	echo -e "\e[34m"
+	echo -e "    Sonoff-Auto-Flasher\n by Bogdan L. Dumitru 2020\nbogdan.dumitru@nightshift.ro" | boxes -d ian_jones
+	echo -e "\e[0m"
+	checkVars || helpVars 
 	init || texit 2
 
 	if [[ $MODE == "pair" ]]; then 
