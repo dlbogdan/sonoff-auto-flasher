@@ -16,7 +16,7 @@ function debug_log(){
 
 function log(){
        if [[ $DEBUGLEVEL -ge $1 ]];then  
-	       echo "$(date) - Func:[${FUNCNAME[$((${#FUNCNAME[@]}-2))]}] DL:$@"
+	       echo "$(date) - Func:[${FUNCNAME[$((${#FUNCNAME[@]}-3))]}] DL:$@"
        fi
 }
 
