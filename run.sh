@@ -563,12 +563,14 @@ function checkPrivilegedMode(){
 }
 
 function checkVars(){
-	log 1 "Checking Variables"
+	log 0 "Checking Variables"
 	## defaults
 	true ${CHANNEL:=1}
 	true ${HW_MODE:=g}
 	true ${DRIVER:=nl80211}
 	true ${AP_ADDR:=172.10.1.1}
+	true ${DEBUGLEVEL:=1}
+
 	##
 	checkPrivilegedMode || return 1
 	checkDEVICEIDvar || return 1
