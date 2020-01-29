@@ -1,6 +1,5 @@
 #!/bin/bash
 # Bogdan Lucian Dumitru 2020
-# ALPHA VERSION
 
 
 #debug levels
