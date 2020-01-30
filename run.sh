@@ -280,7 +280,9 @@ function enableInternetRouting(){
 	log 1 "Enabling internet routing for OTA unlocking"
 	echo 1 > /proc/sys/net/ipv4/ip_forward
 	internetIF=$(netstat -rn | grep ^0.0.0.0 | awk '{print $8}')
+	log 1 "Routing from internet interface $internetIF to wireless AP on $INTERFACE"
 	netAndMask=$(getNetworkAndMask_echo)
+	log 2 "Network: $netAndMask"
 	iptables -A FORWARD -o ${internetIF} -i ${INTERFACE} -s ${netAndMask} -m conntrack --ctstate NEW -j ACCEPT
 	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 	iptables -t nat -F POSTROUTING
