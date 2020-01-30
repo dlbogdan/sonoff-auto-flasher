@@ -293,6 +293,7 @@ function unlockOTA(){
 	log 2 "DEVICEID: $deviceID"
 	out=$(curl http://${deviceIP}:8081/zeroconf/ota_unlock -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\": { } }" 2>/dev/null)
 	error=$(echo -e "$out" | getJSONVarFromQuery .error)
+	log 3 $out
 	if [[ $error != "0" ]]; then
 		log 1 "Error occured unlocking OTA"
 		return 1;
