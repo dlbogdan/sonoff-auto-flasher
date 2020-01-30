@@ -13,7 +13,7 @@ mainIndex=0;
 function log(){
 	if [[ $DEBUGLEVEL -ge $1 ]];then  
 		shift
-		echo -e "$(date +"%T %d/%m/%y") - Func:[${FUNCNAME[1]}] $@"
+		echo -e "$(date +"%T ") - Func:[${FUNCNAME[1]}] $@"
 	fi
 }
 
@@ -279,6 +279,8 @@ function getHostIPOnIntf_echo(){
 function enableInternetRouting(){
 	log 1 "Enabling internet routing for OTA unlocking"
 	echo 1 > /proc/sys/net/ipv4/ip_forward
+	sysctl -w net.ipv4.conf.all.forwarding=1     ### maybe raspbian needs this ? Ubuntu used to sometimes in the past
+	sysctl -w net.ipv4.conf.default.forwarding=1 ### 
 	internetIF=$(netstat -rn | grep ^0.0.0.0 | awk '{print $8}')
 	log 1 "Routing from internet interface $internetIF to wireless AP on $INTERFACE"
 	netAndMask=$(getNetworkAndMask_echo)
@@ -295,7 +297,7 @@ function unlockOTA(){
 	enableInternetRouting
 	sleep 2
 	log 2 "DEVICEID: $deviceID"
-	out=$(curl http://${deviceIP}:8081/zeroconf/ota_unlock -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\": { } }" 2>/dev/null)
+	out=$(curl -m 25 http://${deviceIP}:8081/zeroconf/ota_unlock -XPOST --data "{\"deviceid\":\"${deviceID}\",\"data\": { } }" 2>/dev/null)
 	error=$(echo -e "$out" | getJSONVarFromQuery .error)
 	log 3 $out
 	if [[ $error != "0" ]]; then
@@ -621,7 +623,7 @@ function _main(){
 	fi
 
 	echo -e "\e[34m"
-	echo -e "    Sonoff-Auto-Flasher\n by Bogdan L. Dumitru 2020\nbogdan.dumitru@nightshift.ro" | boxes -d ian_jones
+	echo -e "    Sonoff-Auto-Flasher\n by Bogdan L. Dumitru 2020\nhttps://groups.google.com/forum/#!topic/sonoffusers/iH30WndiEXQ" | boxes -d ian_jones
 	echo -e "\e[0m"
 	checkVars || helpVars 
 	init || texit 2
