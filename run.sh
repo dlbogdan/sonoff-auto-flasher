@@ -8,6 +8,8 @@
 #	3 - verbose l2
 mainIndex=0;
 
+
+
 function log(){
 	if [[ $DEBUGLEVEL -ge $1 ]];then  
 		shift
@@ -612,6 +614,10 @@ function getIP(){
 }
 
 function _main(){
+	if [[ $DEBUGLEVEL -ge 4 ]];then  #//special cases only
+		set -x
+	fi
+
 	echo -e "\e[34m"
 	echo -e "    Sonoff-Auto-Flasher\n by Bogdan L. Dumitru 2020\nbogdan.dumitru@nightshift.ro" | boxes -d ian_jones
 	echo -e "\e[0m"
