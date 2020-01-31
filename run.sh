@@ -279,16 +279,18 @@ function getHostIPOnIntf_echo(){
 function enableInternetRouting(){
 	log 1 "Enabling internet routing for OTA unlocking"
 	echo 1 > /proc/sys/net/ipv4/ip_forward
-	sysctl -w net.ipv4.conf.all.forwarding=1     ### maybe raspbian needs this ? Ubuntu used to sometimes in the past
-	sysctl -w net.ipv4.conf.default.forwarding=1 ### 
+#	sysctl -w net.ipv4.conf.all.forwarding=1     ### maybe raspbian needs this ? Ubuntu used to sometimes in the past
+#	sysctl -w net.ipv4.conf.default.forwarding=1 ### 
 	internetIF=$(netstat -rn | grep ^0.0.0.0 | awk '{print $8}')
 	log 1 "Routing from internet interface $internetIF to wireless AP on $INTERFACE"
 	netAndMask=$(getNetworkAndMask_echo)
 	log 2 "Network: $netAndMask"
-	iptables -A FORWARD -o ${internetIF} -i ${INTERFACE} -s ${netAndMask} -m conntrack --ctstate NEW -j ACCEPT
-	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-	iptables -t nat -F POSTROUTING
-	iptables -t nat -A POSTROUTING -o ${internetIF} -j MASQUERADE
+#	iptables -A FORWARD -o ${internetIF} -i ${INTERFACE} -s ${netAndMask} -m conntrack --ctstate NEW -j ACCEPT
+#	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+	iptables-nft -t nat -F POSTROUTING
+	iptables-nft -t nat -A POSTROUTING -o ${internetIF} -j MASQUERADE
+	iptables-nft -A FORWARD -i ${internetIF} -o ${INTERFACE} -m state —state RELATED,ESTABLISHED -j ACCEPT
+	iptables-nft -A FORWARD -i ${INTERFACE} -o ${internetIF} -j ACCEPT
 }
 
 function unlockOTA(){
